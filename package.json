@@ -3,7 +3,16 @@
   "version": "1.0.0",
   "description": "react tutorial",
   "main": "index.js",
-  "keywords": ["react", "tutorial"],
+  "keywords": [
+    "react",
+    "tutorial"
+  ],
   "author": "lgyn10",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "eslint": "^8.54.0",
+    "eslint-config-gwyng": "github:gwyng-dev/eslint-config-gwyng",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
 }
