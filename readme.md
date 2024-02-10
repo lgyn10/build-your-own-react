@@ -23,6 +23,25 @@ Step VIII: Hooks
 
 ###### Step 1 : The `creatElement` Function
 
+`createElement 함수`는 React에서 가장 핵심적인 API이다. 이 함수는 React 요소를 생성할 때 사용한다.
+
+```jsx
+// createElement 함수 구조
+React.createElement(type, [props], [...children]);
+```
+
+`type`
+이 매개 변수는 문자열이거나 React 컴포넌트이다. 문자열인 경우, HTML 태그 이름을 나타낸다. `div, span, input`
+React 컴포넌트인 경우 해당 컴포넌트의 인스턴스를 생성한다.
+
+`props`
+이 매개 변수는 객체이다. 컴포넌트에 전달할 속성이나 메서드를 정의한다. 이 객체는 선택사항이며, 필요하지 않은 경우 null을 전달할 수 있다.
+
+`children`
+이 매개 변수는 컴포넌트의 자식 요소들이다. 선택적 매개 변수이며, 여러 개의 자식 요소를 가질 수 있다. 자식 요소는 `문자열, 숫자, React 요소, 배열` 등 여러 형태를 가질 수 있다.
+
+> 일반적으로는 JSX 문법을 사용하여 직관적인 코드를 작성한다.
+
 ###### Step 2 : The `render` Function
 
 ###### Step 3 : Concurrent Mode
