@@ -21,10 +21,28 @@ function createTextElement(text) {
   };
 }
 
+//! render
+function render(element, container) {
+  const dom = element.type == 'TEXT_ELEMENT' ? document.createTextNode('') : document.createElement(element.type);
+
+  // 노드에 엘리먼트 속성 부여
+  const isProperty = (key) => key !== 'children';
+  Object.keys(element.props)
+    .filter(isProperty)
+    .forEach((name) => {
+      dom[name] = element.props[name];
+    });
+
+  element.props.children.forEach((child) => render(child, dom));
+
+  container.appendChild(dom);
+}
+
 //! ========================= 실행 코드 =========================
 
 const Didact = {
   createElement,
+  render,
 };
 
 /** @jsx Didact.createElement */
@@ -36,4 +54,4 @@ const element = (
 );
 
 const container = document.getElementById('root');
-ReactDOM.render(element, container);
+Didact.render(element, container);
