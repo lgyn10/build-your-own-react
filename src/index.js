@@ -25,23 +25,68 @@ function createTextElement(text) {
 function createDom(fiber) {
   const dom = fiber.type == 'TEXT_ELEMENT' ? document.createTextNode('') : document.createElement(fiber.type);
   // 노드에 엘리먼트 속성 부여
-  const isProperty = (key) => key !== 'children';
-  Object.keys(fiber.props)
-    .filter(isProperty)
-    .forEach((name) => {
-      dom[name] = fiber.props[name];
-    });
+  // const isProperty = (key) => key !== 'children';
+  // Object.keys(fiber.props)
+  //   .filter(isProperty)
+  //   .forEach((name) => {
+  //     dom[name] = fiber.props[name];
+  //   });
+  updateDom(dom, {}, fiber.props);
 
   return dom;
+}
+
+const isEvent = (key) => key.startsWith('on');
+const isProperty = (key) => key !== 'children' && !isEvent(key);
+const isNew = (prev, next) => (key) => prev[key] !== next[key];
+const isGone = (prev, next) => (key) => !(key in next);
+
+//! updateDom
+function updateDom(dom, prevProps, nextProps) {
+  //Remove old or changed event listeners
+  Object.keys(prevProps)
+    .filter(isEvent)
+    .filter((key) => !(key in nextProps) || isNew(prevProps, nextProps)(key))
+    .forEach((name) => {
+      const eventType = name.toLowerCase().substring(2);
+      dom.removeEventListener(eventType, prevProps[name]);
+    });
+
+  // remove old properties
+  Object.keys(prevProps)
+    .filter(isProperty)
+    .filter(isGone(prevProps, nextProps))
+    .forEach((name) => {
+      dom[name] = '';
+    });
+
+  // set new or changed properties
+  Object.keys(nextProps)
+    .filter(isProperty)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) => {
+      dom[name] = nextProps[name];
+    });
+
+  // Add event listeners
+  Object.keys(nextProps)
+    .filter(isEvent)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) => {
+      const eventType = name.toLowerCase().substring(2);
+      dom.addEventListener(eventType, nextProps[name]);
+    });
 }
 
 //! commitRoot
 // 변경사항을 실제 DOM에 반영하는 함수
 //  fiber 트리를 DOM에 커밋
 function commitRoot() {
-  // TODO add nodes to dom
+  deletions.forEach(commitWork);
 
+  // TODO add nodes to dom
   commitWork(wipRoot.child);
+  currentRoot = wipRoot; // 마지막으로 DOM에 커밋된 fiber 트리를 저장
   wipRoot = null;
 }
 
@@ -50,7 +95,23 @@ function commitWork(fiber) {
   if (!fiber) return;
 
   const domParent = fiber.parent.dom;
-  domParent.appendChild(fiber.dom);
+
+  // 1. PLACEMENT
+  // fiber가 PLACEMENT 태그를 가진다면 이전에 했던 것과 동일하게 부모 fiber 노드에 자식 DOM 노드를 추가
+  if (fiber.effectTag === 'PLACEMENT' && fiber.dom != null) {
+    domParent.appendChild(fiber.dom);
+  }
+  // 3. UPDATE
+  // 갱신(UPDATE)의 경우, 이미 존재하는 DOM 노드를 변경된 props를 이용하여 갱신
+  else if (fiber.effectTag === 'UPDATE' && fiber.dom != null) {
+    updateDom(fiber.dom, fiber.alternate.props, fiber.props);
+  }
+  // 2. DELETION
+  // DELETION 태그는 반대로 자식을 부모 DOM에서 제거
+  else if (fiber.effectTag === 'DELETION') {
+    domParent.removeChild(fiber.dom);
+  }
+
   commitWork(fiber.child);
   commitWork(fiber.sibling);
 }
@@ -80,13 +141,17 @@ function render(element, container) {
     props: {
       children: [element],
     },
+    alternate: currentRoot, // 이 속성은 이전의 커밋 단계에서 DOM에 추가했던 오래된 fiber에 대한 링크
   };
+  deletions = [];
   nextUnitOfWork = wipRoot;
 }
 
 //! 동시성 모드 - Concurrent Mode
 let nextUnitOfWork = null;
+let currentRoot = null;
 let wipRoot = null; // work in progress
+let deletions = null;
 
 function workLoop(deadline) {
   let shouldYield = false;
@@ -107,6 +172,7 @@ function workLoop(deadline) {
   requestIdleCallback(workLoop);
 }
 
+//! performUnitOfWork
 function performUnitOfWork(fiber) {
   // 1. add dom node
   if (!fiber.dom) fiber.dom = createDom(fiber);
@@ -124,24 +190,7 @@ function performUnitOfWork(fiber) {
   // React의 재조정(Reconciliation) 과정에서 중요한 부분으로,
   // 가상 DOM 트리를 Fiber 트리로 변환하는 작업을 수행한다.
   const elements = fiber.props.children;
-  let index = 0;
-  let prevSibling = null;
-
-  while (index < element.length) {
-    const element = elements[index];
-    const newFiber = {
-      type: element.type,
-      props: element.props,
-      parent: fiber, // 부모-자식 관계와 형제 관계를 설정하는 것
-      dom: null,
-    };
-    if (index === 0) {
-      fiber.child = newFiber; // 부모 fiber의 child로 직접 연결
-    } else {
-      prevSibling = newFiber; // 이전 형제의 sibling으로 연결
-      index++;
-    }
-  }
+  reconcileChildren(fiber, elements);
 
   // 3. return next unit of work
   // 탐색 작업, 탐색은 먼저 child, sibling, parent's sibling 순서로 진행
@@ -168,6 +217,74 @@ function performUnitOfWork(fiber) {
   // 암묵적으로 undefined를 반환
 }
 
+//! reconcileChildren
+// 새로운 fiber를 생성하는 코드를 performUnitOfWork에서 추출
+// 오래된 fiber를 새로운 엘리먼트로 재조정(reconcile) 할 것임
+function reconcileChildren(wipFiber, elements) {
+  let index = 0;
+  let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
+  let prevSibling = null;
+
+  // element는 우리가 DOM 안에 렌더링하고 싶은 것
+  // oldFiber는 가장 마지막으로 렌더링 했던 것
+  while (index < elements.length || oldFiber != null) {
+    const element = elements[index];
+    let newFiber = null;
+
+    // TODO compare oldFiber to element
+    // DOM에 적용하기 위해, element와 oldFiber 사이에 어떤 차이가 생겼는지 비교해야 한다.
+    const sameType = oldFiber && element && element.type == oldFiber.type;
+
+    // 1. 오래된 fiber와 새로운 element가 같은 타입일 때,
+    // DOM 노드를 유지하고 새로운 props만 업데이트한다.
+    if (sameType) {
+      // add update the node
+      newFiber = {
+        type: oldFiber.type,
+        props: element.props,
+        dom: oldFiber.dom,
+        parent: wipFiber,
+        alternate: oldFiber,
+        effectTag: 'UPDATE',
+      };
+    }
+
+    // 2. 서로 타입이 다르고 새로운 element가 존재할 때,
+    // 이는 새로운 DOM 노드 생성이 필요하다는 뜻이다.
+    if (element && !sameType) {
+      // add this node
+      newFiber = {
+        type: element.type,
+        props: element.props,
+        dom: null,
+        parent: wipFiber,
+        alternate: null,
+        effectTag: 'PLACEMENT',
+      };
+    }
+
+    // 3. 타입이 다르고 오래된 fiber가 존재할 때,
+    // 오래된 노드를 제거해야 한다.
+    if (oldFiber && !sameType) {
+      // delete the oldFiber's node
+      oldFiber.effectTag = 'DELETION';
+      deletions.push(oldFiber);
+    }
+
+    if (oldFiber) {
+      oldFiber = oldFiber.sibling;
+    }
+
+    if (index === 0) {
+      wipFiber.child = newFiber; // 부모 fiber의 child로 직접 연결
+    } else if (element) {
+      prevSibling.sibling = newFiber; // 이전 형제의 sibling으로 연결
+    }
+    prevSibling = newFiber;
+    index++;
+  }
+}
+
 //! ========================= 실행 코드 =========================
 
 requestIdleCallback(workLoop);
@@ -179,13 +296,20 @@ const Didact = {
 };
 
 /** @jsx Didact.createElement */
-const element = (
-  <div id='foo'>
-    <a>bar</a>
-    <b />
-  </div>
-);
-
 const container = document.getElementById('root');
-Didact.render(element, container);
-// render ->
+
+const updateValue = (e) => {
+  rerender(e.target.value);
+};
+
+const rerender = (value) => {
+  const element = (
+    <div>
+      <input onInput={updateValue} value={value} />
+      <h2>Hello {value}</h2>
+    </div>
+  );
+  Didact.render(element, container);
+};
+
+rerender('World');
