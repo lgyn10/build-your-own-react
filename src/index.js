@@ -35,6 +35,26 @@ function createDom(fiber) {
   return dom;
 }
 
+//! commitRoot
+// 변경사항을 실제 DOM에 반영하는 함수
+//  fiber 트리를 DOM에 커밋
+function commitRoot() {
+  // TODO add nodes to dom
+
+  commitWork(wipRoot.child);
+  wipRoot = null;
+}
+
+//! commitWork
+function commitWork(fiber) {
+  if (!fiber) return;
+
+  const domParent = fiber.parent.dom;
+  domParent.appendChild(fiber.dom);
+  commitWork(fiber.child);
+  commitWork(fiber.sibling);
+}
+
 //! render
 // 함수 내부에 루트 fiber 생성, 이를 nextUnitOfWork로 설정
 // 남은 작업들은 performUnitOfWork에서 진행
@@ -55,16 +75,18 @@ function render(element, container) {
   // render 함수에서 fiber 트리의 루트에 nextUnitOfWork 함수를 설정한다.
   // nextUnitOfWork는 현재 업데이트에서 “다음에 작업할 단위”를 가리키는 포인터 역할을 한다.
   // 이 변수는 “작업의 진행 상태”를 추적해나가며, 리액트가 멈췄다가 다시 시작해도 작업을 이어갈 수 있게 해준다.
-  nextUnitOfWork = {
+  wipRoot = {
     dom: container,
     props: {
       children: [element],
     },
   };
+  nextUnitOfWork = wipRoot;
 }
 
 //! 동시성 모드 - Concurrent Mode
 let nextUnitOfWork = null;
+let wipRoot = null; // work in progress
 
 function workLoop(deadline) {
   let shouldYield = false;
@@ -72,6 +94,16 @@ function workLoop(deadline) {
     nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
     shouldYield = deadline.timeRemaining() < 1;
   }
+
+  if (!nextUnitOfWork && wipRoot) {
+    // 모든 fiber 작업이 완료되었고 (nextUnitOfWork가 없음)
+    // 적용해야 할 변경사항이 있을 때 (wipRoot가 존재)
+    // 실제 DOM에 모든 변경사항을 한 번에 적용하는 역할
+
+    commitRoot();
+    // 이전 코드 performUnitOfWork 함수에서 DOM 조작을 바로 하지 않고 모아뒀던 것을 이 시점에서 한 번에 처리
+  }
+
   requestIdleCallback(workLoop);
 }
 
@@ -84,7 +116,9 @@ function performUnitOfWork(fiber) {
   // 이러한 메커니즘은 React의 재조정 과정에서 효율적인 DOM 조작을 가능하게 하는 중요한 부분
   // 불필요한 DOM 생성을 방지하고, 가능한 한 기존 DOM을 재사용함으로써 성능을 최적화한다.
 
-  if (fiber.parent) fiber.parent.dom.appendChild(fiber.dom);
+  // 브라우저가 렌더링이 진행되고 있는 중간에 난입할 수 있어 미완성된 UI를 보게 될 수도 있다.
+  //| if (fiber.parent) fiber.parent.dom.appendChild(fiber.dom);
+  // 이를 위해, 이 라인을 제거하고 DOM 업데이트를 한 번에 처리하는 별도의 커밋 단계를 만드는 것이 좋음
 
   // 2. create new fibers
   // React의 재조정(Reconciliation) 과정에서 중요한 부분으로,
