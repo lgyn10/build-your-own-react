@@ -1,6 +1,5 @@
 //! createElement
 function createElement(type, props, ...children) {
-  // console.log('createElement', type);
   return {
     type,
     props: {
@@ -13,7 +12,6 @@ function createElement(type, props, ...children) {
 //! createTextElement
 // createElement에서 사용
 function createTextElement(text) {
-  // console.log('createTextElement', text);
   return {
     type: 'TEXT_ELEMENT',
     props: {
@@ -25,7 +23,6 @@ function createTextElement(text) {
 
 //! createDOM
 function createDom(fiber) {
-  // console.log('createDom', fiber);
   const dom = fiber.type == 'TEXT_ELEMENT' ? document.createTextNode('') : document.createElement(fiber.type);
   updateDom(dom, {}, fiber.props);
   return dom;
@@ -38,7 +35,6 @@ const isGone = (prev, next) => (key) => !(key in next);
 
 //! updateDom
 function updateDom(dom, prevProps, nextProps) {
-  // console.log('updateDom', dom);
   //Remove old or changed event listeners
   Object.keys(prevProps)
     .filter(isEvent)
@@ -78,7 +74,6 @@ function updateDom(dom, prevProps, nextProps) {
 // 변경사항을 실제 DOM에 반영하는 함수
 //  fiber 트리를 DOM에 커밋
 function commitRoot() {
-  // console.log('commitRoot');
   deletions.forEach(commitWork);
 
   // TODO add nodes to dom
@@ -89,7 +84,6 @@ function commitRoot() {
 
 //! commitWork
 function commitWork(fiber) {
-  // console.log('commitWork', fiber);
   if (!fiber) return;
 
   let domParentFiber = fiber.parent;
@@ -123,7 +117,6 @@ function commitWork(fiber) {
 
 //! commitDeletion
 function commitDeletion(fiber, domParent) {
-  // console.log('commitDeletion', fiber);
   if (fiber.dom) {
     domParent.removeChild(fiber.dom);
   } else {
@@ -147,7 +140,6 @@ function commitDeletion(fiber, domParent) {
 // root에 도달했다면 이는 렌더링 작업 수행이 끝났음을 의미
 
 function render(element, container) {
-  // console.log('render');
   // TODO set next unit of work
   // render 함수에서 fiber 트리의 루트에 nextUnitOfWork 함수를 설정한다.
   // nextUnitOfWork는 현재 업데이트에서 “다음에 작업할 단위”를 가리키는 포인터 역할을 한다.
@@ -165,7 +157,6 @@ function render(element, container) {
 
 //! workLoop - 동시성 모드 지원
 function workLoop(deadline) {
-  // // console.log('workLoop', deadline);
   let shouldYield = false;
   while (nextUnitOfWork && !shouldYield) {
     nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
@@ -187,7 +178,6 @@ function workLoop(deadline) {
 //! performUnitOfWork
 // 최초의 fiber 인자는 nextUnitOfWork 즉, wipRoot
 function performUnitOfWork(fiber) {
-  // console.log('performUnitOfWork', fiber);
   // 함수형 컴포넌트 지원
   const isFunctionComponent = fiber.type instanceof Function;
   if (isFunctionComponent) {
@@ -242,19 +232,13 @@ function performUnitOfWork(fiber) {
 
 //! updateFunctionComponent
 function updateFunctionComponent(fiber) {
-  // console.log('updateFunctionComponent', fiber);
   // 자식 요소를 얻는 함수를 실행
-
-  wipFiber = fiber;
-  hookIndex = 0;
-  wipFiber.hooks = []; // 동일한 컴포넌트에서 여러 변 useState 함수를 호출 할 수 있도록 함
   const children = [fiber.type(fiber.props)];
   reconcileChildren(fiber, children);
 }
 
 //! updateHostComponent
 function updateHostComponent(fiber) {
-  // console.log('updateFunctionComponent', fiber);
   if (!fiber.dom) {
     fiber.dom = createDom(fiber);
   }
@@ -266,7 +250,6 @@ function updateHostComponent(fiber) {
 // 새로운 fiber를 생성하는 코드를 performUnitOfWork에서 추출
 // 오래된 fiber를 새로운 엘리먼트로 재조정(reconcile) 할 것임
 function reconcileChildren(wipFiber, elements) {
-  // console.log('reconcileChildren');
   let index = 0;
   let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
   let prevSibling = null;
@@ -331,99 +314,7 @@ function reconcileChildren(wipFiber, elements) {
   }
 }
 
-//! useState
-function useState(initial) {
-  const oldHook = wipFiber.alternate && wipFiber.alternate.hooks && wipFiber.alternate.hooks[hookIndex];
-  const hook = {
-    state: oldHook ? oldHook.state : initial,
-    queue: [],
-  };
-
-  const actions = oldHook ? oldHook.queue : [];
-  actions.forEach((action) => {
-    if (typeof action === 'function') hook.state = action(hook.state);
-  });
-
-  const setState = (action) => {
-    hook.queue.push(action);
-    wipRoot = {
-      dom: currentRoot.dom,
-      props: currentRoot.props,
-      alternate: currentRoot,
-    };
-    nextUnitOfWork = wipRoot;
-    deletions = [];
-  };
-
-  wipFiber.hooks.push(hook);
-  hookIndex++;
-  return [hook.state, setState];
-}
-
-//! useMemo
-// 값들을 메모이제이션
-function useMemo(callback, deps) {
-  // 이전에 렌더링된 훅이 있는지 탐색
-  const oldHook = wipFiber.alternate && wipFiber.alternate.hooks && wipFiber.alternate.hooks[hookIndex];
-
-  // 훅 정의
-  const hook = {
-    value: undefined,
-    deps,
-  };
-
-  // 의존성 배열 비교 함수
-  const isEqualDeps = (oldDeps, newDeps) => {
-    // 값의 참조 값을 비교하기 위해 Object.is()
-    return oldDeps.length === newDeps.length && oldDeps.every((dep, i) => Object.is(dep, newDeps[i]));
-  };
-
-  if (oldHook && isEqualDeps(oldHook.deps, deps)) {
-    hook.value = oldHook.value;
-  } else {
-    hook.value = callback();
-  }
-
-  wipFiber.hooks.push(hook);
-  hookIndex++;
-  return hook.value;
-}
-
-//! memo
-// 컴포넌트를 메모이제이션
-// props가 변할 때만 리렌더링
-function memo(component) {
-  let prevProps = null; // 이전 props를 저장할 변수
-  let prevElement = null; // 이전 렌더링 결과를 저장할 변수
-
-  return function (props) {
-    const arePropsEqual = (oldProps, newProps) => {
-      if (!oldProps) return false; // 최초 렌더링 경우
-      return Object.keys(oldProps).every((key) => {
-        if (key === '__self' || key === '__source' || key === 'children') return true;
-        else return oldProps[key] === newProps[key];
-      });
-    };
-
-    // 이전 props와 비교
-    const oldProps = wipFiber?.alternate?.props;
-
-    if (arePropsEqual(oldProps, props)) {
-      console.log('캐싱된 결과를 재사용');
-      return prevElement;
-    } else {
-      console.log('새로 렌더링');
-      prevProps = props;
-      prevElement = component(props);
-      return prevElement;
-    }
-  };
-}
-
 //! ========================= 실행 코드 =========================
-
-// useState를 위한 전역 변수 초기화
-let hookIndex = null;
 
 let nextUnitOfWork = null;
 let currentRoot = null;
@@ -446,95 +337,23 @@ requestIdleCallback(workLoop);
 const Didact = {
   createElement,
   render,
-  useState,
-  useMemo,
-  memo,
 };
 
-//! 3
 /** @jsx Didact.createElement */
-function Counter() {
-  const [state, setState] = Didact.useState(1);
-  const [state2, setState2] = Didact.useState(1);
-
-  const hardCnt = Didact.useMemo(() => {
-    for (let i = 0; i < 999999999; i++) {}
-    return state2 + 1;
-  }, [state2]);
-
-  const [parentAge, setParentAge] = useState(0);
-  const [childAge, setChildAge] = useState(0);
-
-  const incrementParentAge = () => {
-    setParentAge((prev) => prev + 1);
-  };
-
-  const incrementChildAge = () => {
-    setChildAge((prev) => prev + 1);
-  };
-
-  console.log('부모 컴포넌트가 렌더링됨');
-
-  return (
-    <div>
-      <h1>useState Count: {state}</h1>
-      <button onClick={() => setState((cnt) => cnt + 1)}>증가</button>
-
-      <h1>useMemo Count2: {hardCnt}</h1>
-      <button onClick={() => setState2((cnt) => cnt + 1)}>증가</button>
-
-      <div>
-        <h1>부모</h1>
-        <p>age: {parentAge}</p>
-        <button onClick={incrementParentAge}>부모 나이 증가</button>
-        <button onClick={incrementChildAge}>자녀 나이 증가</button>
-        <Child name={'홍길동'} age={childAge} />
-      </div>
-    </div>
-  );
-}
-
-/** @jsx Didact.createElement */
-const Child = Didact.memo(function Child({ name, age }) {
-  console.log('자녀 컴포넌트가 렌더링됨');
-  return (
-    <div>
-      <h3>자녀</h3>
-      <p>name: {name}</p>
-      <p>age: {age}</p>
-    </div>
-  );
-});
-
-const element = <Counter />;
 const container = document.getElementById('root');
-Didact.render(element, container);
 
-//! 2
-// /** @jsx Didact.createElement */
-// function App(props) {
-//   return <h1>Hi {props.name}</h1>;
-// }
-// const element = <App name='foo' />;
-// const container = document.getElementById('root');
-// Didact.render(element, container);
+const updateValue = (e) => {
+  rerender(e.target.value);
+};
 
-//! 1
-// /** @jsx Didact.createElement */
-// const container = document.getElementById('root');
+const rerender = (value) => {
+  const element = (
+    <div>
+      <input onInput={updateValue} value={value} />
+      <h2>Hello {value}</h2>
+    </div>
+  );
+  Didact.render(element, container);
+};
 
-// const updateValue = (e) => {
-//   rerender(e.target.value);
-// };
-
-// const rerender = (value) => {
-//   const element = (
-//     <div>
-//       <input onInput={updateValue} value={value} />
-//       <h2>Hello {value}</h2>
-//     </div>
-//   );
-//   Didact.render(element, container);
-// };
-
-// rerender('World');
+rerender('World');

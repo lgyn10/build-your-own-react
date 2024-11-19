@@ -391,34 +391,15 @@ function useMemo(callback, deps) {
 
 //! memo
 // 컴포넌트를 메모이제이션
-// props가 변할 때만 리렌더링
-function memo(component) {
-  let prevProps = null; // 이전 props를 저장할 변수
-  let prevElement = null; // 이전 렌더링 결과를 저장할 변수
-
-  return function (props) {
-    const arePropsEqual = (oldProps, newProps) => {
-      if (!oldProps) return false; // 최초 렌더링 경우
-      return Object.keys(oldProps).every((key) => {
-        if (key === '__self' || key === '__source' || key === 'children') return true;
-        else return oldProps[key] === newProps[key];
-      });
-    };
-
-    // 이전 props와 비교
-    const oldProps = wipFiber?.alternate?.props;
-
-    if (arePropsEqual(oldProps, props)) {
-      console.log('캐싱된 결과를 재사용');
-      return prevElement;
-    } else {
-      console.log('새로 렌더링');
-      prevProps = props;
-      prevElement = component(props);
-      return prevElement;
-    }
-  };
+function memo() {
+  return (props) => {};
 }
+
+/**
+ * const value = useMemo(() => {
+ *  return caculate();
+ * }, []);
+ */
 
 //! ========================= 실행 코드 =========================
 
@@ -452,28 +433,23 @@ const Didact = {
 };
 
 //! 3
+
+const increase = (number) => {
+  return number + 1;
+};
 /** @jsx Didact.createElement */
 function Counter() {
   const [state, setState] = Didact.useState(1);
   const [state2, setState2] = Didact.useState(1);
 
+  // const hardCnt = () => {
+  //   for (let i = 0; i < 999999999; i++) {}
+  //   return state2 + 1;
+  // };
   const hardCnt = Didact.useMemo(() => {
     for (let i = 0; i < 999999999; i++) {}
     return state2 + 1;
   }, [state2]);
-
-  const [parentAge, setParentAge] = useState(0);
-  const [childAge, setChildAge] = useState(0);
-
-  const incrementParentAge = () => {
-    setParentAge((prev) => prev + 1);
-  };
-
-  const incrementChildAge = () => {
-    setChildAge((prev) => prev + 1);
-  };
-
-  console.log('부모 컴포넌트가 렌더링됨');
 
   return (
     <div>
@@ -482,30 +458,9 @@ function Counter() {
 
       <h1>useMemo Count2: {hardCnt}</h1>
       <button onClick={() => setState2((cnt) => cnt + 1)}>증가</button>
-
-      <div>
-        <h1>부모</h1>
-        <p>age: {parentAge}</p>
-        <button onClick={incrementParentAge}>부모 나이 증가</button>
-        <button onClick={incrementChildAge}>자녀 나이 증가</button>
-        <Child name={'홍길동'} age={childAge} />
-      </div>
     </div>
   );
 }
-
-/** @jsx Didact.createElement */
-const Child = Didact.memo(function Child({ name, age }) {
-  console.log('자녀 컴포넌트가 렌더링됨');
-  return (
-    <div>
-      <h3>자녀</h3>
-      <p>name: {name}</p>
-      <p>age: {age}</p>
-    </div>
-  );
-});
-
 const element = <Counter />;
 const container = document.getElementById('root');
 Didact.render(element, container);
