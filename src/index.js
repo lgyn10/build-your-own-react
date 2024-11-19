@@ -401,17 +401,20 @@ function memo(component) {
       if (!oldProps) return false; // 최초 렌더링 경우
       return Object.keys(oldProps).every((key) => {
         if (key === '__self' || key === '__source' || key === 'children') return true;
-        else return oldProps[key] === newProps[key];
+        else return Object.is(oldProps[key], newProps[key]);
       });
     };
 
     // 이전 props와 비교
     const oldProps = wipFiber?.alternate?.props;
 
+    // 리렌더링이 필요 없는 경우 - props가 같을 경우
     if (arePropsEqual(oldProps, props)) {
-      console.log('캐싱된 결과를 재사용');
+      console.log('캐싱된 컴포넌트를 재사용');
       return prevElement;
-    } else {
+    }
+    // 리렌더링이 필요한 경우 - props가 달라졌을 경우
+    else {
       console.log('새로 렌더링');
       prevProps = props;
       prevElement = component(props);
